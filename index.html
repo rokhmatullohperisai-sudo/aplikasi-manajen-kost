@@ -1,0 +1,2145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KostKu Pro — Sistem Manajemen Kost Profesional</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // Define global interaction functions immediately so onclick handlers can access them safely
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.remove('hidden');
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.classList.add('hidden');
+            }
+        }
+
+        function openNewRegistrationModal() {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('regCheckInDateInput');
+            if (dateInput) dateInput.value = todayStr;
+            openModal('modalNewRegistration');
+        }
+
+        function openTenantDetail(tenantId) {
+            if (!tenantId) {
+                switchTab('tenants');
+                return;
+            }
+            openEditTenantModal(tenantId);
+        }
+
+        function openTenantRecapModal() {
+            const totalRooms = state.rooms.length;
+            const occupiedRooms = state.rooms.filter(r => r.status === 'occupied').length;
+            const availableRooms = state.rooms.filter(r => r.status === 'available').length;
+            const occupancyPct = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+
+            const contentEl = document.getElementById('tenantRecapContent');
+            if (contentEl) {
+                contentEl.innerHTML = `
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                            <span class="text-xs text-slate-500 font-medium block">Total Kamar</span>
+                            <span class="text-2xl font-extrabold text-slate-900">${totalRooms}</span>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
+                            <span class="text-xs text-emerald-600 font-medium block">Terisi</span>
+                            <span class="text-2xl font-extrabold text-emerald-700">${occupiedRooms}</span>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-brand-50 border border-brand-100 text-center">
+                            <span class="text-xs text-brand-600 font-medium block">Tersedia</span>
+                            <span class="text-2xl font-extrabold text-brand-700">${availableRooms}</span>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-amber-50 border border-amber-100 text-center">
+                            <span class="text-xs text-amber-600 font-medium block">Okupansi</span>
+                            <span class="text-2xl font-extrabold text-amber-700">${occupancyPct}%</span>
+                        </div>
+                    </div>
+                    <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 max-h-[260px] overflow-y-auto">
+                        <h4 class="font-bold text-slate-900 text-sm mb-3">Daftar Penghuni Aktif (${state.tenants.length} Orang)</h4>
+                        <div class="space-y-2.5">
+                            ${state.tenants.map(t => {
+                                const room = state.rooms.find(r => r.id === t.roomId) || { number: '-' };
+                                return `
+                                    <div class="p-3 bg-white rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center font-bold">
+                                                ${room.number}
+                                            </div>
+                                            <div>
+                                                <span class="font-bold text-slate-900 block">${t.name}</span>
+                                                <span class="text-slate-500">${t.occupation} • ${t.phone}</span>
+                                            </div>
+                                        </div>
+                                        <span class="text-slate-500 font-medium">Masuk: ${t.checkInDate}</span>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            openModal('modalTenantRecap');
+        }
+
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Mobile Header -->
+    <header class="lg:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-sm">
+                <i data-lucide="building-2" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-slate-900 text-base leading-tight">KostKu Pro</h1>
+                <p class="text-xs text-slate-500">Manajemen Hunian</p>
+            </div>
+        </div>
+        <button id="mobileMenuBtn" class="p-2.5 rounded-xl text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition">
+            <i data-lucide="menu" class="w-6 h-6"></i>
+        </button>
+    </header>
+
+    <!-- Mobile Sidebar Overlay -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 hidden lg:hidden transition-opacity"></div>
+
+    <div class="flex min-h-screen">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform -translate-x-full lg:translate-x-0 lg:static lg:inset-auto transition-transform duration-200 ease-in-out flex flex-col justify-between">
+            <div>
+                <!-- Brand Logo -->
+                <div class="p-6 flex items-center justify-between border-b border-slate-100">
+                    <div class="flex items-center gap-3">
+                        <div id="sidebarLogoIcon" class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-md shadow-brand-600/20">
+                            <i data-lucide="building-2" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <span id="sidebarKostName" class="font-bold text-lg text-slate-900 tracking-tight block">KostKu Pro</span>
+                            <span id="sidebarKostSub" class="text-xs font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">Griya Harmoni</span>
+                        </div>
+                    </div>
+                    <button id="closeSidebarBtn" class="lg:hidden p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Nav Links -->
+                <nav class="p-4 space-y-1.5" id="navMenu">
+                    <button data-tab="dashboard" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-brand-50 text-brand-700">
+                        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                        Dashboard
+                    </button>
+                    <button data-tab="rooms" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                        <i data-lucide="door-open" class="w-5 h-5"></i>
+                        Daftar Kamar
+                    </button>
+                    <button data-tab="tenants" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                        <i data-lucide="users" class="w-5 h-5"></i>
+                        Penghuni Kost
+                    </button>
+                    <button data-tab="billing" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                        <i data-lucide="receipt" class="w-5 h-5"></i>
+                        Tagihan & Kas
+                    </button>
+                    <button data-tab="rules" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                        <i data-lucide="scroll-text" class="w-5 h-5"></i>
+                        Peraturan Kost
+                    </button>
+                    <button data-tab="profile" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all">
+                        <i data-lucide="user-cog" class="w-5 h-5"></i>
+                        Edit Profil Kost
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Sidebar Footer / Info -->
+            <div class="p-4 m-4 rounded-2xl bg-slate-900 text-white">
+                <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Periode Aktif
+                    </div>
+                    <button onclick="switchTab('profile')" class="text-[11px] text-brand-300 hover:underline">Edit Profil</button>
+                </div>
+                <p class="font-semibold text-sm" id="currentPeriodDisplay">November 2026</p>
+                <p class="text-xs text-slate-400 mt-2" id="sidebarFooterOwner">Bpk. H. Ahmad</p>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+            
+            <!-- Top Bar Desktop -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                <div>
+                    <h2 id="pageTitle" class="text-2xl font-bold text-slate-900 tracking-tight">Ringkasan Operasional</h2>
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                        <p id="pageSubtitle" class="text-sm text-slate-500">Pantau okupansi kamar, pendapatan sewa, dan jatuh tempo penghuni.</p>
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5 px-3 py-1 bg-brand-50 border border-brand-200/80 rounded-xl text-brand-700 text-xs font-semibold shadow-2xs">
+                                <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                                <span id="headerDateBadge">Jum'at, 13 Nov 2026 M • 02 Jumadil Awwal 1448 H</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200/80 rounded-xl text-emerald-700 text-xs font-semibold shadow-2xs">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+                                <span id="headerLocationBadge">Serang, Banten</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <button onclick="openTenantRecapModal()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs transition">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+                        Rekap Penghuni
+                    </button>
+                    <button onclick="openModal('modalAddExpense')" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs transition">
+                        <i data-lucide="minus-circle" class="w-4 h-4 text-rose-500"></i>
+                        Catat Pengeluaran
+                    </button>
+                    <button onclick="openNewRegistrationModal()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20 transition">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i>
+                        Tambah Pendaftaran Kost
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 1: DASHBOARD -->
+            <section id="tab-dashboard" class="tab-content space-y-6">
+                <!-- Modern Hero Banner & Quick Stats -->
+                <div class="relative overflow-hidden bg-gradient-to-r from-slate-900 via-indigo-950 to-brand-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+                    <div class="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-brand-500/20 rounded-full blur-3xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div>
+                            <span class="px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/30 text-brand-200 border border-brand-400/30 inline-flex items-center gap-1.5 mb-3">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                Beranda Aktif • Griya Harmoni
+                            </span>
+                            <h3 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Selamat Datang, Pemilik</h3>
+                            <p class="text-slate-300 text-sm mt-1 max-w-xl">Semua laporan hunian, verifikasi sewa, dan pengeluaran operasional terpantau secara real-time pada periode ini.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button onclick="openNewRegistrationModal()" class="px-5 py-3 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-600/30 transition flex items-center gap-2">
+                                <i data-lucide="user-plus" class="w-4 h-4"></i>
+                                Pendaftaran Baru
+                            </button>
+                            <button onclick="switchTab('billing')" class="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-semibold text-sm border border-white/10 transition flex items-center gap-2">
+                                <i data-lucide="receipt" class="w-4 h-4"></i>
+                                Cek Tagihan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Cards Modern Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+                    <!-- Okupansi -->
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs hover:shadow-md transition group">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i data-lucide="bed-double" class="w-6 h-6"></i>
+                            </div>
+                            <span id="kpiOccupancyPct" class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">0%</span>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Okupansi Kamar</span>
+                        <div id="kpiOccupancy" class="text-2xl font-extrabold text-slate-900">0/0</div>
+                        <p id="kpiAvailableText" class="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500"></i>
+                            0 kamar siap huni
+                        </p>
+                    </div>
+
+                    <!-- Pemasukan Bulan Ini -->
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs hover:shadow-md transition group">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i data-lucide="wallet" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50/80 text-emerald-700">Lunas</span>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Pemasukan Sewa</span>
+                        <div id="kpiIncome" class="text-2xl font-extrabold text-slate-900">Rp 0</div>
+                        <p class="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
+                            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+                            Terverifikasi aman
+                        </p>
+                    </div>
+
+                    <!-- Tagihan Tertunda -->
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs hover:shadow-md transition group">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i data-lucide="clock" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700">Tertunda</span>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Belum Lunas</span>
+                        <div id="kpiPending" class="text-2xl font-extrabold text-slate-900">Rp 0</div>
+                        <p id="kpiPendingCount" class="text-xs text-amber-600 font-medium mt-2">0 penghuni menunggu bayar</p>
+                    </div>
+
+                    <!-- Laba Bersih -->
+                    <div class="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs hover:shadow-md transition group">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i data-lucide="pie-chart" class="w-6 h-6"></i>
+                            </div>
+                            <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">Netto</span>
+                        </div>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-1">Kas Bersih</span>
+                        <div id="kpiNetProfit" class="text-2xl font-extrabold text-slate-900">Rp 0</div>
+                        <p id="kpiExpenseNote" class="text-xs text-slate-500 mt-2">Pengeluaran: Rp 0</p>
+                    </div>
+                </div>
+
+                <!-- Two Column Section: Priority Billing & Quick Room Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Tagihan Perlu Tindakan -->
+                    <div class="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden flex flex-col">
+                        <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-extrabold text-slate-900 text-lg">Tagihan Menunggu Pembayaran</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Kirim pengingat WhatsApp atau konfirmasi pelunasan instan</p>
+                            </div>
+                            <button onclick="switchTab('billing')" class="text-xs font-semibold text-brand-600 hover:text-brand-700 bg-brand-50 px-3.5 py-2 rounded-xl transition">Lihat Semua →</button>
+                        </div>
+                        <div class="divide-y divide-slate-100" id="dashboardPendingList">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Status Peta Kamar Cepat -->
+                    <div class="bg-white rounded-3xl border border-slate-100 shadow-xs p-6 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-extrabold text-slate-900 text-lg">Denah Status Kamar</h3>
+                                <div class="flex items-center gap-3 text-xs">
+                                    <span class="flex items-center gap-1 text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Tersedia</span>
+                                    <span class="flex items-center gap-1 text-slate-600"><span class="w-2.5 h-2.5 rounded-full bg-brand-600"></span> Terisi</span>
+                                </div>
+                            </div>
+                            <div id="dashboardRoomMap" class="grid grid-cols-3 gap-3">
+                                <!-- Injected by JS -->
+                            </div>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-slate-100">
+                            <button onclick="switchTab('rooms')" class="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition shadow-sm">
+                                Kelola Semua Unit Kamar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: DAFTAR KAMAR -->
+            <section id="tab-rooms" class="tab-content hidden space-y-6">
+                <!-- Filter Bar -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="flex flex-wrap items-center gap-2" id="roomFilterBtns">
+                        <button data-filter="all" class="room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white transition">Semua Kamar</button>
+                        <button data-filter="available" class="room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Tersedia (Kosong)</button>
+                        <button data-filter="occupied" class="room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Terisi</button>
+                        <button data-filter="maintenance" class="room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Perbaikan</button>
+                    </div>
+                    <div class="relative w-full sm:w-64">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" id="roomSearchInput" placeholder="Cari nomor / tipe kamar..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500">
+                    </div>
+                </div>
+
+                <!-- Rooms Grid -->
+                <div id="roomsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <!-- Injected by JS -->
+                </div>
+            </section>
+
+            <!-- TAB 3: PENGHUNI KOST -->
+            <section id="tab-tenants" class="tab-content hidden space-y-6">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                    <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 class="font-bold text-slate-900">Database Penghuni Aktif</h3>
+                            <p class="text-xs text-slate-500">Informasi kontak darurat, tanggal masuk, catatan, dan status tagihan</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="relative flex-1 sm:w-64">
+                                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                                <input type="text" id="tenantSearchInput" placeholder="Cari nama penghuni..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50/80 border-b border-slate-200/80 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                    <th class="py-3.5 px-5">Penghuni</th>
+                                    <th class="py-3.5 px-5">Unit Kamar</th>
+                                    <th class="py-3.5 px-5">Kontak WhatsApp</th>
+                                    <th class="py-3.5 px-5">Info Tagihan</th>
+                                    <th class="py-3.5 px-5">Catatan / Memos</th>
+                                    <th class="py-3.5 px-5">Status Sewa</th>
+                                    <th class="py-3.5 px-5 text-right">Edit / Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tenantsTableBody" class="divide-y divide-slate-100 text-sm">
+                                <!-- Injected by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: TAGIHAN & KAS -->
+            <section id="tab-billing" class="tab-content hidden space-y-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Daftar Tagihan Sewa -->
+                    <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Tagihan Sewa Bulanan</h3>
+                                <p class="text-xs text-slate-500">Periode November 2026</p>
+                            </div>
+                            <button onclick="generateMonthlyBills()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 transition">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                Sinkron Tagihan Bulan Ini
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50/80 border-b border-slate-200/80 text-xs font-semibold text-slate-500 uppercase">
+                                        <th class="py-3 px-5">Kamar & Penghuni</th>
+                                        <th class="py-3 px-5">Nominal</th>
+                                        <th class="py-3 px-5">Status</th>
+                                        <th class="py-3 px-5 text-center">Cetak Pembayaran</th>
+                                        <th class="py-3 px-5 text-right">Kirim Tagihan / Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="billingTableBody" class="divide-y divide-slate-100 text-sm">
+                                    <!-- Injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Riwayat Pengeluaran Operasional -->
+                    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col">
+                        <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-900">Pengeluaran Operasional</h3>
+                                <p class="text-xs text-slate-500">Listrik, air, kebersihan, servis</p>
+                            </div>
+                            <button onclick="openModal('modalAddExpense')" class="p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 transition" title="Tambah Pengeluaran">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <div id="expenseList" class="divide-y divide-slate-100 flex-1 overflow-y-auto max-h-[420px]">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: EDIT PROFIL KOST -->
+            <section id="tab-profile" class="tab-content hidden space-y-6">
+                <div class="max-w-2xl bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-8">
+                    <div class="flex items-center gap-4 pb-6 border-b border-slate-100 mb-6">
+                        <div id="profileHeaderAvatarWrap" class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 overflow-hidden border border-brand-200">
+                            <img id="profileHeaderLogoImg" src="" alt="Logo Kost" class="w-full h-full object-cover hidden">
+                            <i id="profileHeaderLogoIcon" data-lucide="building-2" class="w-7 h-7"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-lg">Pengaturan Profil & Identitas Kost</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Informasi ini akan otomatis tercetak pada kuitansi digital, poster peraturan, dan struk termal.</p>
+                        </div>
+                    </div>
+
+                    <form id="formEditProfile" class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nama Kost / Properti</label>
+                                <input type="text" id="profileKostName" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Slogan / Keterangan Singkat</label>
+                                <input type="text" id="profileKostSub" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nama Pemilik</label>
+                                <input type="text" id="profileOwnerName" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">No. Telp / WhatsApp</label>
+                                <input type="tel" id="profilePhone" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                        </div>
+
+                        <!-- Kolom Ganti Logo Kost & Foto Pemilik -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+                                    <i data-lucide="image" class="w-4 h-4 text-brand-600"></i> Ganti Logo Kost
+                                </label>
+                                <input type="file" id="profileLogoInput" accept="image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 cursor-pointer">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+                                    <i data-lucide="user-circle" class="w-4 h-4 text-brand-600"></i> Foto Pemilik Kost
+                                </label>
+                                <input type="file" id="profileOwnerPhotoInput" accept="image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 cursor-pointer">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-4">
+                            <div class="bg-brand-50/70 p-4 sm:p-5 rounded-2xl border border-brand-200/80 shadow-2xs">
+                                <label class="block text-xs font-bold text-brand-900 mb-1.5 flex items-center gap-2">
+                                    <i data-lucide="map-pin" class="w-4 h-4 text-brand-600"></i>
+                                    Kolom Perintah Lokasi Kost (Wilayah / Kota)
+                                </label>
+                                <p class="text-xs text-slate-600 mb-3">Tentukan kota atau wilayah lokasi fisik kost Anda agar otomatis tampil di badge header atas dan laporan rekap.</p>
+                                <input type="text" id="profileLocation" required class="w-full px-4 py-3 text-sm bg-white border border-brand-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 font-bold text-slate-900 shadow-2xs" placeholder="Contoh: Serang, Banten">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Periode Akuntansi Aktif</label>
+                                <input type="text" id="profilePeriod" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nama Bank & No. Rekening Pembayaran</label>
+                                <input type="text" id="profileBank" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500" placeholder="BCA a.n Ahmad (1234567890)">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1.5">Alamat Lengkap Kost</label>
+                            <textarea id="profileAddress" rows="2" required class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500"></textarea>
+                        </div>
+
+                        <div class="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                            <button type="submit" class="px-6 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm transition">
+                                Simpan Perubahan Profil
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- TAB 6: PERATURAN KOST -->
+            <section id="tab-rules" class="tab-content hidden space-y-6">
+                <div class="max-w-3xl bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-8">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <i data-lucide="scroll-text" class="w-7 h-7"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-lg">Tata Tertib & Peraturan Penghuni Kost</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Aturan tata tertib lingkungan kost yang berlaku dan dapat diedit kapan saja.</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="openSendRulesWhatsAppModal()" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-[#25D366] hover:bg-[#1ebe5d] text-white shadow-sm flex items-center gap-2 transition">
+                                <i data-lucide="message-circle" class="w-4 h-4"></i>
+                                Kirim Peraturan (WA)
+                            </button>
+                            <button onclick="printRulesPdf()" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-2 transition">
+                                <i data-lucide="printer" class="w-4 h-4"></i>
+                                Cetak / Poster PDF
+                            </button>
+                            <button onclick="openAddRuleModal()" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm flex items-center gap-2 transition">
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                Tambah Aturan
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="rulesListContainer" class="space-y-3">
+                        <!-- Injected by JS -->
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Modal 1: Tambah Pendaftaran Kost -->
+    <div id="modalNewRegistration" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-100 my-auto">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Tambah Pendaftaran Kost</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Pilih fasilitas kost yang diinginkan dan lengkapi data penghuni</p>
+                </div>
+                <button onclick="closeModal('modalNewRegistration')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="formNewRegistration" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-2">Fasilitas Kost</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="AC" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>AC</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Listrik Token" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Listrik Token</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="WiFi" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>WiFi</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Kamar Tidur" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Kamar Tidur</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Ruang Tamu" class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Ruang Tamu</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Toilet" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Toilet</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Parkir Kendaraan" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Parkir Kendaraan</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                            <input type="checkbox" name="facilities" value="Keamanan" checked class="rounded text-brand-600 focus:ring-brand-500">
+                            <span>Keamanan</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nomor Unit / Kamar</label>
+                        <input type="text" name="roomNumber" required placeholder="Contoh: C-01" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Lokasi / Lantai Unit</label>
+                        <input type="text" name="roomLocation" placeholder="Contoh: Lantai 1 Sayap Utara" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tarif Sewa / Bulan (Rp)</label>
+                        <input type="number" name="price" required min="100000" step="50000" placeholder="1850000" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nama Lengkap Penghuni</label>
+                    <input type="text" name="name" required placeholder="Contoh: Raka Pratama" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">No. WhatsApp</label>
+                        <input type="tel" name="phone" required placeholder="081234567890" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tanggal Masuk</label>
+                        <input type="date" name="checkInDate" required id="regCheckInDateInput" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Pekerjaan / Kampus</label>
+                        <input type="text" name="occupation" placeholder="Karyawan / Mahasiswa" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Pembayaran Pertama</label>
+                        <select name="initialPaymentStatus" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500 bg-white">
+                            <option value="paid">Langsung Lunas</option>
+                            <option value="unpaid">Belum Bayar</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Catatan / Memos Khusus Kamar</label>
+                    <input type="text" name="notes" placeholder="Contoh: Titip kunci di pos satpam jika kosong" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Upload Foto KTP</label>
+                    <label for="regKtpInput" class="flex flex-col items-center justify-center w-full p-3.5 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer bg-slate-50/70 hover:bg-slate-100/70 hover:border-brand-400 transition">
+                        <div id="regKtpPlaceholder" class="flex items-center gap-2.5 text-slate-500">
+                            <i data-lucide="id-card" class="w-5 h-5 text-brand-600"></i>
+                            <div class="text-left">
+                                <span class="text-xs font-semibold text-slate-700 block">Pilih atau ambil foto KTP</span>
+                                <span class="text-[11px] text-slate-400">Format JPG, PNG (Maks. 5MB)</span>
+                            </div>
+                        </div>
+                        <div id="regKtpPreviewWrap" class="hidden w-full flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <img id="regKtpPreviewImg" src="" alt="Preview KTP" class="w-16 h-10 object-cover rounded-lg border border-slate-200 shrink-0">
+                                <span id="regKtpFileName" class="text-xs font-medium text-slate-700 truncate">ktp.jpg</span>
+                            </div>
+                            <span class="text-xs font-semibold text-brand-600 shrink-0">Ganti</span>
+                        </div>
+                        <input id="regKtpInput" type="file" name="ktpFile" accept="image/*" class="hidden">
+                    </label>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Upload Foto Penghuni</label>
+                    <label for="regPhotoInput" class="flex flex-col items-center justify-center w-full p-3.5 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer bg-slate-50/70 hover:bg-slate-100/70 hover:border-brand-400 transition">
+                        <div id="regPhotoPlaceholder" class="flex items-center gap-2.5 text-slate-500">
+                            <i data-lucide="camera" class="w-5 h-5 text-brand-600"></i>
+                            <div class="text-left">
+                                <span class="text-xs font-semibold text-slate-700 block">Pilih atau ambil foto wajah penghuni</span>
+                                <span class="text-[11px] text-slate-400">Format JPG, PNG (Maks. 5MB)</span>
+                            </div>
+                        </div>
+                        <div id="regPhotoPreviewWrap" class="hidden w-full flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <img id="regPhotoPreviewImg" src="" alt="Preview Foto" class="w-12 h-12 object-cover rounded-full border border-slate-200 shrink-0">
+                                <span id="regPhotoFileName" class="text-xs font-medium text-slate-700 truncate">foto.jpg</span>
+                            </div>
+                            <span class="text-xs font-semibold text-brand-600 shrink-0">Ganti</span>
+                        </div>
+                        <input id="regPhotoInput" type="file" name="photoFile" accept="image/*" class="hidden">
+                    </label>
+                </div>
+                <div class="pt-2 flex justify-end gap-2.5">
+                    <button type="button" onclick="closeModal('modalNewRegistration')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Konfirmasi Masuk</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: Catat Pengeluaran -->
+    <div id="modalAddExpense" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-lg font-bold text-slate-900">Catat Pengeluaran Kost</h3>
+                <button onclick="closeModal('modalAddExpense')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="formAddExpense" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Keterangan Pengeluaran</label>
+                    <input type="text" name="title" required placeholder="Contoh: Token Listrik Utama & WiFi" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Kategori</label>
+                        <select name="category" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500 bg-white">
+                            <option value="Utilitas">Listrik & Air</option>
+                            <option value="Internet">WiFi / Internet</option>
+                            <option value="Perawatan">Perbaikan & Servis</option>
+                            <option value="Kebersihan">Kebersihan & Sampah</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nominal (Rp)</label>
+                        <input type="number" name="amount" required min="1000" placeholder="350000" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="pt-2 flex justify-end gap-2.5">
+                    <button type="button" onclick="closeModal('modalAddExpense')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 text-white hover:bg-rose-700 shadow-sm">Simpan Pengeluaran</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 3: Kuitansi Digital / Receipt Preview -->
+    <div id="modalReceipt" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-100">
+            <div class="text-center border-b border-dashed border-slate-200 pb-4 mb-4">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                    <i data-lucide="badge-check" class="w-7 h-7"></i>
+                </div>
+                <h3 class="font-bold text-slate-900 text-lg">KUITANSI PEMBAYARAN</h3>
+                <p class="text-xs text-slate-500">Kost Griya Harmoni — KostKu Pro</p>
+            </div>
+            <div id="receiptContent" class="space-y-2.5 text-sm mb-5">
+                <!-- Injected by JS -->
+            </div>
+            <div class="flex flex-col gap-2">
+                <button onclick="downloadCurrentReceipt()" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-sm">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    Download Kuitansi (JPG)
+                </button>
+                <button id="btnSendReceiptWa" onclick="sendCurrentReceiptToWa()" class="w-full py-2.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-sm">
+                    <i data-lucide="message-circle" class="w-4 h-4"></i>
+                    Kirim Kuitansi ke WhatsApp
+                </button>
+                <button onclick="closeModal('modalReceipt')" class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 5: Preview KTP Penghuni -->
+    <div id="modalViewKtp" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Dokumen KTP Penghuni</h3>
+                    <p id="viewKtpTenantName" class="text-xs text-slate-500 mt-0.5">Nama Penghuni</p>
+                </div>
+                <button onclick="closeModal('modalViewKtp')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div id="viewKtpImageContainer" class="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center min-h-[200px]">
+                <!-- Injected by JS -->
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button onclick="closeModal('modalViewKtp')" class="px-4 py-2 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 6: Rekap Penghuni Kost -->
+    <div id="modalTenantRecap" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-xl border border-slate-100 my-auto">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i data-lucide="users" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Rekapitulasi Penghuni Kost</h3>
+                        <p class="text-xs text-slate-500">Laporan rekap aktif & status hunian per periode ini</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modalTenantRecap')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div id="tenantRecapContent" class="space-y-4 mb-6">
+                <!-- Injected by JS -->
+            </div>
+
+            <div class="flex flex-wrap items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                <button onclick="downloadTenantRecapJpg()" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-2 transition">
+                    <i data-lucide="image" class="w-4 h-4"></i>
+                    Download Rekap (JPG)
+                </button>
+                <button onclick="printTenantRecapPdf()" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 hover:bg-brand-700 text-white shadow-sm flex items-center gap-2 transition">
+                    <i data-lucide="printer" class="w-4 h-4"></i>
+                    Download / Cetak PDF
+                </button>
+                <button onclick="closeModal('modalTenantRecap')" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 7: Edit Tenant & Room Modal -->
+    <div id="modalEditTenant" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Edit Data Penghuni & Kamar</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Perbarui nama, kontak, tarif, atau catatan khusus</p>
+                </div>
+                <button onclick="closeModal('modalEditTenant')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="formEditTenant" class="space-y-4">
+                <input type="hidden" id="editTenantId">
+                <input type="hidden" id="editRoomId">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nama Lengkap Penghuni</label>
+                    <input type="text" id="editTenantName" required class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">No. WhatsApp</label>
+                        <input type="tel" id="editTenantPhone" required class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Pekerjaan / Kampus</label>
+                        <input type="text" id="editTenantOccupation" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Nomor Kamar</label>
+                        <input type="text" id="editRoomNumber" required class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Tarif Sewa (Rp)</label>
+                        <input type="number" id="editRoomPrice" required class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Catatan / Memos Kamar</label>
+                    <input type="text" id="editRoomNotes" placeholder="Catatan khusus penghuni..." class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div class="pt-2 flex justify-end gap-2.5">
+                    <button type="button" onclick="closeModal('modalEditTenant')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 8: Tambah / Edit Peraturan Kost -->
+    <div id="modalAddRule" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex items-center justify-between mb-5">
+                <div>
+                    <h3 id="ruleModalTitle" class="text-lg font-bold text-slate-900">Tambah Peraturan Kost</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Tuliskan poin peraturan tata tertib baru</p>
+                </div>
+                <button onclick="closeModal('modalAddRule')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form id="formAddRule" class="space-y-4">
+                <input type="hidden" id="editRuleId">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Judul Peraturan</label>
+                    <input type="text" id="ruleTitleInput" required placeholder="Contoh: Jam Malam Tamu" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Isi / Keterangan Peraturan</label>
+                    <textarea id="ruleDescInput" rows="3" required placeholder="Contoh: Tamu lawan jenis dilarang masuk ke dalam kamar tidur setelah pukul 22.00 WIB." class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500"></textarea>
+                </div>
+                <div class="pt-2 flex justify-end gap-2.5">
+                    <button type="button" onclick="closeModal('modalAddRule')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700 shadow-sm">Simpan Peraturan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 9: Kirim Peraturan via WhatsApp -->
+    <div id="modalSendRulesWa" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <div class="flex items-center justify-between mb-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i data-lucide="message-circle" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-900">Kirim Peraturan via WhatsApp</h3>
+                        <p class="text-xs text-slate-500">Pilih penghuni atau kirim broadcast ke semua</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modalSendRulesWa')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1.5">Pilih Tujuan Pengiriman</label>
+                    <select id="waRulesTargetSelect" class="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-hidden focus:border-brand-500 bg-white">
+                        <option value="broadcast">📢 Broadcast ke Semua Penghuni</option>
+                    </select>
+                </div>
+                <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 max-h-[160px] overflow-y-auto">
+                    <span class="font-bold text-slate-900 block mb-1">Pratinjau Pesan WhatsApp:</span>
+                    <p id="waRulesPreviewText" class="italic whitespace-pre-line text-slate-500">Tata tertib dan peraturan kost...</p>
+                </div>
+                <div class="pt-2 flex justify-end gap-2.5">
+                    <button type="button" onclick="closeModal('modalSendRulesWa')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</button>
+                    <button type="button" onclick="executeSendRulesWhatsApp()" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#25D366] hover:bg-[#1ebe5d] text-white shadow-sm flex items-center gap-2">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                        Kirim Sekarang
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-sm">
+        <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+        <span id="toastMessage">Berhasil menyimpan perubahan</span>
+    </div>
+
+    <script>
+        // ================= STATE MANAGEMENT =================
+        let state = {
+            currentTab: 'dashboard',
+            roomFilter: 'all',
+            roomSearch: '',
+            tenantSearch: '',
+            profile: {
+                kostName: 'KostKu Pro',
+                kostSub: 'Griya Harmoni',
+                ownerName: 'Bpk. H. Ahmad',
+                phone: '081200008899',
+                location: 'Serang, Banten',
+                address: 'Jl. Melati Indah No. 12, Serang',
+                bank: 'BCA 1880345678 a.n Ahmad',
+                period: 'November 2026',
+                logoUrl: null,
+                ownerPhotoUrl: null
+            },
+            rules: [
+                { id: 'rule_1', title: '1. Jam Malam Tamu', desc: 'Tamu lawan jenis dilarang berada di dalam kamar tidur setelah pukul 22.00 WIB.' },
+                { id: 'rule_2', title: '2. Pembayaran Sewa', desc: 'Pembayaran sewa kamar wajib dilunasi paling lambat tanggal 10 setiap bulannya.' },
+                { id: 'rule_3', title: '3. Kebersihan & Sampah', desc: 'Sampah pribadi wajib dibuang setiap hari ke tempat sampah besar di area depan.' },
+                { id: 'rule_4', title: '4. Parkir Kendaraan', desc: 'Parkir kendaraan di area khusus sesuai nomor kamar masing-masing untuk ketertiban.' },
+                { id: 'rule_5', title: '5. Penghematan Listrik & Air', desc: 'Matikan lampu, AC, dan kran air saat meninggalkan kamar.' }
+            ],
+            rooms: [
+                { id: 'r_1', number: 'A-01', location: 'Lantai 1 Sayap Utara', type: 'VIP AC', price: 1750000, status: 'occupied', facilities: 'AC, WiFi, Kasur, Kamar Mandi Dalam', notes: 'Penghuni menyukai kamar tenang' },
+                { id: 'r_2', number: 'A-02', location: 'Lantai 1 Sayap Utara', type: 'VIP AC', price: 1750000, status: 'available', facilities: 'AC, WiFi, Kasur, Kamar Mandi Dalam', notes: 'Siap huni' },
+                { id: 'r_3', number: 'B-01', location: 'Lantai 2', type: 'Standard', price: 1350000, status: 'occupied', facilities: 'Kipas Angin, WiFi, Kasur', notes: 'Titip paket di pos satpam' },
+                { id: 'r_4', number: 'B-02', location: 'Lantai 2', type: 'Standard', price: 1350000, status: 'available', facilities: 'Kipas Angin, WiFi, Kasur', notes: '' },
+                { id: 'r_5', number: 'C-01', location: 'Lantai 3', type: 'Deluxe', price: 2100000, status: 'occupied', facilities: 'AC, Water Heater, Smart TV, WiFi', notes: 'Langganan parkir mobil' },
+                { id: 'r_6', number: 'C-02', location: 'Lantai 3', type: 'Deluxe', price: 2100000, status: 'available', facilities: 'AC, Water Heater, Smart TV, WiFi', notes: '' }
+            ],
+            tenants: [
+                { id: 't_1', roomId: 'r_1', name: 'Raka Pratama', phone: '081234567890', occupation: 'Software Engineer', checkInDate: '2025-10-01', photoUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80' },
+                { id: 't_2', roomId: 'r_3', name: 'Siti Rahma', phone: '081987654321', occupation: 'Mahasiswa UNTIRTA', checkInDate: '2025-09-15', photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80' },
+                { id: 't_3', roomId: 'r_5', name: 'Budi Santoso', phone: '081399887766', occupation: 'Banker', checkInDate: '2025-08-10', photoUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80' }
+            ],
+            bills: [
+                { id: 'b_1', tenantId: 't_1', roomId: 'r_1', period: 'November 2026', amount: 1750000, status: 'paid', paidDate: '2026-11-02', dueDate: null },
+                { id: 'b_2', tenantId: 't_2', roomId: 'r_3', period: 'November 2026', amount: 1350000, status: 'unpaid', paidDate: null, dueDate: '2026-11-20' },
+                { id: 'b_3', tenantId: 't_3', roomId: 'r_5', period: 'November 2026', amount: 2100000, status: 'paid', paidDate: '2026-11-01', dueDate: null }
+            ],
+            expenses: [
+                { id: 'e_1', title: 'Token Listrik Utama (Bulanan)', category: 'Utilitas', amount: 450000, date: '2026-11-02' },
+                { id: 'e_2', title: 'Perbaikan Pipa Air Lantai 2', category: 'Perawatan', amount: 175000, date: '2026-11-05' },
+                { id: 'e_3', title: 'Iuran Sampah & Kebersihan', category: 'Kebersihan', amount: 100000, date: '2026-11-08' }
+            ]
+        };
+
+        function formatRupiah(num) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMessage');
+            if (toast && toastMsg) {
+                toastMsg.textContent = msg;
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                setTimeout(() => {
+                    toast.classList.add('translate-y-20', 'opacity-0');
+                }, 3500);
+            }
+        }
+
+        // Tab Navigation
+        const tabs = ['dashboard', 'rooms', 'tenants', 'billing', 'rules', 'profile'];
+        function switchTab(tabName) {
+            state.currentTab = tabName;
+            tabs.forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if (el) el.classList.add('hidden');
+            });
+            const activeEl = document.getElementById(`tab-${tabName}`);
+            if (activeEl) activeEl.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                const dt = btn.getAttribute('data-tab');
+                if (dt === tabName) {
+                    btn.className = 'nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all bg-brand-50 text-brand-700 shadow-xs';
+                } else {
+                    btn.className = 'nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all';
+                }
+            });
+
+            // Update titles
+            const titles = {
+                dashboard: { title: 'Ringkasan Operasional', sub: 'Pantau okupansi kamar, pendapatan sewa, dan jatuh tempo penghuni.' },
+                rooms: { title: 'Daftar Unit Kamar Kost', sub: 'Kelola status ketersediaan, fasilitas, dan tarif sewa kamar.' },
+                tenants: { title: 'Database Penghuni Kost', sub: 'Informasi kontak darurat, tanggal masuk, dan status sewa penghuni.' },
+                billing: { title: 'Manajemen Tagihan & Kas', sub: 'Kelola pembayaran sewa bulanan dan pengeluaran operasional.' },
+                rules: { title: 'Tata Tertib & Peraturan Kost', sub: 'Aturan lingkungan kost yang berlaku untuk seluruh penghuni.' },
+                profile: { title: 'Profil & Identitas Kost', sub: 'Atur nama properti, pemilik, nomor kontak, lokasi, logo, dan rekening.' }
+            };
+
+            if (titles[tabName]) {
+                document.getElementById('pageTitle').textContent = titles[tabName].title;
+                document.getElementById('pageSubtitle').textContent = titles[tabName].sub;
+            }
+
+            renderAll();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchTab(btn.getAttribute('data-tab'));
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                if (sidebar) sidebar.classList.add('-translate-x-full');
+                if (overlay) overlay.classList.add('hidden');
+            });
+        });
+
+        // Mobile Sidebar Toggles
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const sidebar = document.getElementById('sidebar');
+
+        if (mobileMenuBtn) {
+            mobileMenuBtn.addEventListener('click', () => {
+                sidebar.classList.remove('-translate-x-full');
+                sidebarOverlay.classList.remove('hidden');
+            });
+        }
+        if (closeSidebarBtn) {
+            closeSidebarBtn.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                sidebarOverlay.classList.add('hidden');
+            });
+        }
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', () => {
+                sidebar.classList.add('-translate-x-full');
+                sidebarOverlay.classList.add('hidden');
+            });
+        }
+
+        function renderAll() {
+            renderDashboard();
+            renderRooms();
+            renderTenants();
+            renderBilling();
+            renderRules();
+            initProfileForm();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        function initProfileForm() {
+            const nameEl = document.getElementById('profileKostName');
+            if (nameEl && !nameEl.value) {
+                document.getElementById('profileKostName').value = state.profile.kostName;
+                document.getElementById('profileKostSub').value = state.profile.kostSub;
+                document.getElementById('profileOwnerName').value = state.profile.ownerName;
+                document.getElementById('profilePhone').value = state.profile.phone;
+                document.getElementById('profileLocation').value = state.profile.location;
+                document.getElementById('profileAddress').value = state.profile.address;
+                document.getElementById('profileBank').value = state.profile.bank;
+                document.getElementById('profilePeriod').value = state.profile.period;
+            }
+
+            const headerLogoImg = document.getElementById('profileHeaderLogoImg');
+            const headerLogoIcon = document.getElementById('profileHeaderLogoIcon');
+            if (headerLogoImg && headerLogoIcon) {
+                if (state.profile.logoUrl) {
+                    headerLogoImg.src = state.profile.logoUrl;
+                    headerLogoImg.classList.remove('hidden');
+                    headerLogoIcon.classList.add('hidden');
+                } else {
+                    headerLogoImg.classList.add('hidden');
+                    headerLogoIcon.classList.remove('hidden');
+                }
+            }
+        }
+
+        function renderDashboard() {
+            if (document.getElementById('sidebarKostName')) document.getElementById('sidebarKostName').textContent = state.profile.kostName;
+            if (document.getElementById('sidebarKostSub')) document.getElementById('sidebarKostSub').textContent = state.profile.kostSub;
+            if (document.getElementById('sidebarFooterOwner')) document.getElementById('sidebarFooterOwner').textContent = state.profile.ownerName;
+            if (document.getElementById('currentPeriodDisplay')) document.getElementById('currentPeriodDisplay').textContent = state.profile.period;
+            if (document.getElementById('headerLocationBadge')) document.getElementById('headerLocationBadge').textContent = state.profile.location || 'Serang, Banten';
+
+            const logoImg = state.profile.logoUrl;
+            const sidebarLogoIcon = document.getElementById('sidebarLogoIcon');
+            if (sidebarLogoIcon) {
+                if (logoImg) {
+                    sidebarLogoIcon.innerHTML = `<img src="${logoImg}" alt="Logo" class="w-full h-full object-cover rounded-xl">`;
+                } else {
+                    sidebarLogoIcon.innerHTML = `<i data-lucide="building-2" class="w-5 h-5"></i>`;
+                }
+            }
+
+            try {
+                const now = new Date();
+                const optionsGreg = { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' };
+                const gregStr = now.toLocaleDateString('id-ID', optionsGreg);
+                const hijriStr = new Intl.DateTimeFormat('id-ID-u-ca-islamic', { day: 'numeric', month: 'long', year: 'numeric' }).format(now);
+                if (document.getElementById('headerDateBadge')) {
+                    document.getElementById('headerDateBadge').textContent = `${gregStr} M • ${hijriStr} H`;
+                }
+            } catch (e) {
+                if (document.getElementById('headerDateBadge')) {
+                    document.getElementById('headerDateBadge').textContent = `Jum'at, 13 Nov 2026 M • 02 Jumadil Awwal 1448 H`;
+                }
+            }
+
+            // KPIs
+            const totalRooms = state.rooms.length;
+            const occupiedRooms = state.rooms.filter(r => r.status === 'occupied').length;
+            const availableRooms = state.rooms.filter(r => r.status === 'available').length;
+            const occupancyPct = totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 100) : 0;
+
+            if (document.getElementById('kpiOccupancyPct')) document.getElementById('kpiOccupancyPct').textContent = occupancyPct + '%';
+            if (document.getElementById('kpiOccupancy')) document.getElementById('kpiOccupancy').textContent = `${occupiedRooms}/${totalRooms} Kamar`;
+            if (document.getElementById('kpiAvailableText')) document.getElementById('kpiAvailableText').innerHTML = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500"></i> ${availableRooms} kamar siap huni`;
+
+            let totalIncome = 0;
+            let totalPending = 0;
+            state.bills.forEach(b => {
+                if (b.status === 'paid') totalIncome += b.amount;
+                else totalPending += b.amount;
+            });
+
+            if (document.getElementById('kpiIncome')) document.getElementById('kpiIncome').textContent = formatRupiah(totalIncome);
+            if (document.getElementById('kpiPending')) document.getElementById('kpiPending').textContent = formatRupiah(totalPending);
+            
+            const unpaidCount = state.bills.filter(b => b.status === 'unpaid').length;
+            if (document.getElementById('kpiPendingCount')) document.getElementById('kpiPendingCount').textContent = `${unpaidCount} penghuni menunggu bayar`;
+
+            let totalExpense = state.expenses.reduce((acc, x) => acc + x.amount, 0);
+            let netProfit = totalIncome - totalExpense;
+            if (document.getElementById('kpiNetProfit')) document.getElementById('kpiNetProfit').textContent = formatRupiah(netProfit);
+            if (document.getElementById('kpiExpenseNote')) document.getElementById('kpiExpenseNote').textContent = `Pengeluaran: ${formatRupiah(totalExpense)}`;
+
+            // Pending Bills list in dashboard
+            const pendingListEl = document.getElementById('dashboardPendingList');
+            if (pendingListEl) {
+                const unpaidBills = state.bills.filter(b => b.status === 'unpaid');
+                if (unpaidBills.length === 0) {
+                    pendingListEl.innerHTML = `
+                        <div class="p-8 text-center text-slate-400 text-xs">
+                            <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto text-emerald-500 mb-2"></i>
+                            Semua tagihan sewa bulan ini sudah lunas!
+                        </div>
+                    `;
+                } else {
+                    pendingListEl.innerHTML = unpaidBills.map(b => {
+                        const tenant = state.tenants.find(t => t.id === b.tenantId) || { name: 'Penghuni', phone: '0812' };
+                        const room = state.rooms.find(r => r.id === b.roomId) || { number: '-' };
+                        return `
+                            <div class="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-slate-50/80 transition">
+                                <div class="flex items-center gap-3.5">
+                                    <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0">
+                                        ${room.number}
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-900 text-sm">${tenant.name}</h4>
+                                        <p class="text-xs text-slate-500">Jatuh tempo: ${b.dueDate || '10 Nov 2026'} • <span class="text-amber-600 font-semibold">${formatRupiah(b.amount)}</span></p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="sendWhatsAppBill('${tenant.name}', '${tenant.phone}', '${room.number}', ${b.amount}, '${b.period}', false)" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5 transition">
+                                        <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Kirim Tagihan
+                                    </button>
+                                    <button onclick="markBillPaid('${b.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition shadow-xs">
+                                        Lunasi
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Room Map grid in dashboard
+            const roomMapEl = document.getElementById('dashboardRoomMap');
+            if (roomMapEl) {
+                roomMapEl.innerHTML = state.rooms.slice(0, 6).map(r => {
+                    const isOcc = r.status === 'occupied';
+                    return `
+                        <div class="p-3 rounded-2xl border ${isOcc ? 'bg-brand-50/60 border-brand-200 text-brand-900' : 'bg-emerald-50/60 border-emerald-200 text-emerald-900'} text-center">
+                            <span class="text-xs font-bold block">${r.number}</span>
+                            <span class="text-[10px] font-medium opacity-80 block mt-0.5">${isOcc ? 'Terisi' : 'Tersedia'}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderRooms() {
+            const grid = document.getElementById('roomsGrid');
+            if (!grid) return;
+
+            const searchVal = (document.getElementById('roomSearchInput')?.value || '').toLowerCase();
+            const filtered = state.rooms.filter(r => {
+                const matchFilter = state.roomFilter === 'all' || r.status === state.roomFilter;
+                const matchSearch = r.number.toLowerCase().includes(searchVal) || r.type.toLowerCase().includes(searchVal) || (r.location && r.location.toLowerCase().includes(searchVal));
+                return matchFilter && matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full p-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-100">
+                        <i data-lucide="door-closed" class="w-10 h-10 mx-auto text-slate-300 mb-2"></i>
+                        <p class="text-sm font-medium">Tidak ada kamar yang sesuai dengan filter.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = filtered.map(r => {
+                const isOcc = r.status === 'occupied';
+                const tenant = state.tenants.find(t => t.roomId === r.id);
+                return `
+                    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 flex flex-col justify-between hover:shadow-md transition">
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-10 h-10 rounded-2xl ${isOcc ? 'bg-brand-600 text-white' : 'bg-emerald-500 text-white'} flex items-center justify-center font-bold text-sm shadow-sm">
+                                        ${r.number}
+                                    </div>
+                                    <div>
+                                        <span class="font-extrabold text-slate-900 block leading-tight">Kamar ${r.number}</span>
+                                        <span class="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><i data-lucide="map-pin" class="w-3 h-3 text-slate-400"></i> ${r.location || 'Lantai Utama'}</span>
+                                    </div>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${isOcc ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
+                                    ${isOcc ? 'Terisi' : 'Tersedia'}
+                                </span>
+                            </div>
+                            <div class="space-y-2 my-4 text-xs">
+                                <div class="flex justify-between py-1 border-b border-slate-100">
+                                    <span class="text-slate-500">Tipe & Tarif</span>
+                                    <span class="font-bold text-slate-900">${r.type} • ${formatRupiah(r.price)}/bln</span>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-slate-100">
+                                    <span class="text-slate-500">Fasilitas</span>
+                                    <span class="font-medium text-slate-700 text-right truncate max-w-[180px]">${r.facilities}</span>
+                                </div>
+                                <div class="flex justify-between py-1 border-b border-slate-100">
+                                    <span class="text-slate-500">Catatan / Memos</span>
+                                    <span class="font-medium text-slate-700 text-right truncate max-w-[180px]">${r.notes || '-'}</span>
+                                </div>
+                                <div class="flex justify-between py-1">
+                                    <span class="text-slate-500">Penghuni Aktif</span>
+                                    <span class="font-bold text-brand-600">${tenant ? tenant.name : 'Belum ada'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                            ${isOcc ? `
+                                <button onclick="openTenantDetail('${tenant ? tenant.id : ''}')" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition text-center">
+                                    Detail Penghuni
+                                </button>
+                                <button onclick="checkoutTenant('${tenant ? tenant.id : ''}')" class="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-semibold transition" title="Check-out">
+                                    Check-out
+                                </button>
+                            ` : `
+                                <button onclick="openNewRegistrationModal()" class="w-full py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold transition text-center shadow-xs">
+                                    Isi Kamar Ini
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Room filter buttons setup
+        document.querySelectorAll('.room-filter').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.room-filter').forEach(b => {
+                    b.className = 'room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+                });
+                btn.className = 'room-filter px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white transition';
+                state.roomFilter = btn.getAttribute('data-filter');
+                renderRooms();
+            });
+        });
+
+        const roomSearchInput = document.getElementById('roomSearchInput');
+        if (roomSearchInput) {
+            roomSearchInput.addEventListener('input', (e) => {
+                state.roomSearch = e.target.value;
+                renderRooms();
+            });
+        }
+
+        function renderTenants() {
+            const tbody = document.getElementById('tenantsTableBody');
+            if (!tbody) return;
+
+            const searchVal = (document.getElementById('tenantSearchInput')?.value || '').toLowerCase();
+            const filtered = state.tenants.filter(t => t.name.toLowerCase().includes(searchVal) || t.phone.includes(searchVal) || t.occupation.toLowerCase().includes(searchVal));
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr><td colspan="7" class="py-8 text-center text-slate-400">Tidak ada data penghuni yang ditemukan.</td></tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(t => {
+                const room = state.rooms.find(r => r.id === t.roomId) || { number: '-', price: 0 };
+                const bill = state.bills.find(b => b.tenantId === t.id && b.status === 'unpaid');
+                const isPaid = !bill;
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition">
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-3">
+                                <img src="${t.photoUrl}" alt="${t.name}" class="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-2xs shrink-0">
+                                <div>
+                                    <span class="font-bold text-slate-900 block">${t.name}</span>
+                                    <span class="text-xs text-slate-500">${t.occupation} • Masuk: ${t.checkInDate}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2.5 py-1 rounded-xl bg-brand-50 text-brand-700 font-bold text-xs">
+                                Kamar ${room.number}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5">
+                            <a href="https://wa.me/${t.phone.replace(/^0/, '62')}" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-semibold hover:underline">
+                                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${t.phone}
+                            </a>
+                        </td>
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-2">
+                                <button onclick="openReceiptModal('${bill ? bill.id : state.bills.find(b => b.tenantId === t.id)?.id || ''}')" class="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition" title="Cetak Kuitansi Pembayaran">
+                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                </button>
+                                <span class="text-xs font-semibold ${isPaid ? 'text-emerald-600' : 'text-amber-600'}">
+                                    ${isPaid ? 'Lunas' : 'Belum Bayar'}
+                                </span>
+                            </div>
+                        </td>
+                        <td class="py-4 px-5 text-xs text-slate-600 max-w-[150px] truncate">
+                            ${room.notes || '-'}
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">
+                                ${isPaid ? 'Aktif Aman' : 'Menunggu Bayar'}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-right space-x-2">
+                            <button onclick="openViewKtpModal('${t.name}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                                KTP
+                            </button>
+                            <button onclick="openEditTenantModal('${t.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 hover:bg-brand-100 text-brand-700 transition">
+                                Edit
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        const tenantSearchInput = document.getElementById('tenantSearchInput');
+        if (tenantSearchInput) {
+            tenantSearchInput.addEventListener('input', () => {
+                renderTenants();
+            });
+        }
+
+        function renderBilling() {
+            const tbody = document.getElementById('billingTableBody');
+            if (!tbody) return;
+
+            tbody.innerHTML = state.bills.map(b => {
+                const tenant = state.tenants.find(t => t.id === b.tenantId) || { name: 'Penghuni', phone: '0812' };
+                const room = state.rooms.find(r => r.id === b.roomId) || { number: '-' };
+                const isPaid = b.status === 'paid';
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition">
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center font-bold text-xs">
+                                    ${room.number}
+                                </div>
+                                <div>
+                                    <span class="font-bold text-slate-900 block">${tenant.name}</span>
+                                    <span class="text-xs text-slate-500">${b.period}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-5 font-extrabold text-slate-900">
+                            ${formatRupiah(b.amount)}
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${isPaid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">
+                                ${isPaid ? 'Lunas' : 'Belum Bayar'}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-center">
+                            <button onclick="openReceiptModal('${b.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition inline-flex items-center gap-1.5">
+                                <i data-lucide="printer" class="w-3.5 h-3.5"></i> Cetak / Kwitansi
+                            </button>
+                        </td>
+                        <td class="py-4 px-5 text-right space-x-2">
+                            <button onclick="sendWhatsAppBill('${tenant.name}', '${tenant.phone}', '${room.number}', ${b.amount}, '${b.period}', ${isPaid})" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#25D366] text-white hover:bg-[#1ebe5d] transition inline-flex items-center gap-1 shadow-2xs" title="Kirim Tagihan ke WhatsApp">
+                                <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Kirim Tagihan
+                            </button>
+                            ${!isPaid ? `
+                                <button onclick="markBillPaid('${b.id}')" class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition shadow-xs">
+                                    Konfirmasi Lunas
+                                </button>
+                            ` : `
+                                <span class="text-xs text-slate-400 font-medium">Selesai</span>
+                            `}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Expenses list
+            const expList = document.getElementById('expenseList');
+            if (expList) {
+                expList.innerHTML = state.expenses.map(e => `
+                    <div class="p-4 flex items-center justify-between gap-3 text-xs hover:bg-slate-50 transition">
+                        <div>
+                            <span class="font-bold text-slate-900 block">${e.title}</span>
+                            <span class="text-slate-500">${e.category} • ${e.date}</span>
+                        </div>
+                        <span class="font-bold text-rose-600">-${formatRupiah(e.amount)}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function generateMonthlyBills() {
+            let addedCount = 0;
+            state.tenants.forEach(t => {
+                const existing = state.bills.find(b => b.tenantId === t.id && b.period === state.profile.period);
+                if (!existing) {
+                    const room = state.rooms.find(r => r.id === t.roomId) || { price: 1500000 };
+                    state.bills.push({
+                        id: 'b_' + Date.now() + Math.floor(Math.random()*100),
+                        tenantId: t.id,
+                        roomId: t.roomId,
+                        period: state.profile.period,
+                        amount: room.price,
+                        status: 'unpaid',
+                        paidDate: null,
+                        dueDate: '2026-11-25'
+                    });
+                    addedCount++;
+                }
+            });
+            showToast(`Berhasil menyinkronkan ${addedCount} tagihan baru untuk periode ${state.profile.period}.`);
+            renderAll();
+        }
+
+        // ================= PERATURAN KOST FEATURES =================
+        function renderRules() {
+            const container = document.getElementById('rulesListContainer');
+            if (!container) return;
+
+            container.innerHTML = state.rules.map((r, idx) => `
+                <div class="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-4">
+                    <div class="space-y-1">
+                        <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-extrabold shrink-0">${idx+1}</span>
+                            ${r.title}
+                        </h4>
+                        <p class="text-xs text-slate-600 pl-8 leading-relaxed">${r.desc}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button onclick="openEditRuleModal('${r.id}')" class="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition" title="Edit Peraturan">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="deleteRule('${r.id}')" class="p-2 rounded-xl bg-white border border-slate-200 text-rose-600 hover:bg-rose-50 transition" title="Hapus Peraturan">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openAddRuleModal() {
+            document.getElementById('editRuleId').value = '';
+            document.getElementById('ruleModalTitle').textContent = 'Tambah Peraturan Kost';
+            document.getElementById('ruleTitleInput').value = '';
+            document.getElementById('ruleDescInput').value = '';
+            openModal('modalAddRule');
+        }
+
+        function openEditRuleModal(id) {
+            const r = state.rules.find(x => x.id === id);
+            if (!r) return;
+            document.getElementById('editRuleId').value = r.id;
+            document.getElementById('ruleModalTitle').textContent = 'Edit Peraturan Kost';
+            document.getElementById('ruleTitleInput').value = r.title;
+            document.getElementById('ruleDescInput').value = r.desc;
+            openModal('modalAddRule');
+        }
+
+        function deleteRule(id) {
+            state.rules = state.rules.filter(r => r.id !== id);
+            showToast('Peraturan kost berhasil dihapus.');
+            renderAll();
+        }
+
+        document.getElementById('formAddRule').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const editId = document.getElementById('editRuleId').value;
+            const title = document.getElementById('ruleTitleInput').value;
+            const desc = document.getElementById('ruleDescInput').value;
+
+            if (editId) {
+                const r = state.rules.find(x => x.id === editId);
+                if (r) {
+                    r.title = title;
+                    r.desc = desc;
+                }
+                showToast('Peraturan kost berhasil diperbarui.');
+            } else {
+                state.rules.push({
+                    id: 'rule_' + Date.now(),
+                    title: title,
+                    desc: desc
+                });
+                showToast('Peraturan kost baru berhasil ditambahkan.');
+            }
+            closeModal('modalAddRule');
+            renderAll();
+        });
+
+        function printRulesPdf() {
+            const printWindow = window.open('', '_blank');
+            const rulesHtml = state.rules.map((r, i) => `
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 14px; page-break-inside: avoid;">
+                    <div style="font-size: 15px; font-weight: bold; color: #1e293b; margin-bottom: 6px;">${r.title}</div>
+                    <div style="font-size: 13px; color: #475569; line-height: 1.5;">${r.desc}</div>
+                </div>
+            `).join('');
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html lang="id">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Poster Tata Tertib - ${state.profile.kostName}</title>
+                    <style>
+                        body { font-family: 'Inter', Arial, sans-serif; background: #ffffff; color: #1e293b; padding: 40px; margin: 0; }
+                        .poster-card { max-width: 700px; margin: 0 auto; border: 3px solid #4f46e5; border-radius: 24px; padding: 40px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+                        .header { text-align: center; border-bottom: 2px dashed #cbd5e1; padding-bottom: 24px; margin-bottom: 24px; }
+                        .header h1 { font-size: 24px; font-weight: 900; color: #4f46e5; margin: 0 0 6px 0; text-transform: uppercase; letter-spacing: 1px; }
+                        .header p { font-size: 14px; color: #64748b; margin: 0; }
+                        .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="poster-card">
+                        <div class="header">
+                            <h1>TATA TERTIB & PERATURAN PENGHUNI</h1>
+                            <p>${state.profile.kostName} (${state.profile.kostSub}) — ${state.profile.location}</p>
+                        </div>
+                        <div>
+                            ${rulesHtml}
+                        </div>
+                        <div class="footer">
+                            <p>Harap seluruh penghuni mematuhi tata tertib di atas demi kenyamanan bersama. Terima kasih.</p>
+                            <p><strong>${state.profile.ownerName} (${state.profile.kostName})</strong></p>
+                        </div>
+                    </div>
+                    <script>
+                        window.onload = function() { window.print(); window.close(); }
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+
+        function openSendRulesWhatsAppModal() {
+            const selectEl = document.getElementById('waRulesTargetSelect');
+            if (selectEl) {
+                selectEl.innerHTML = `
+                    <option value="broadcast">📢 Broadcast ke Semua Penghuni (${state.tenants.length} Orang)</option>
+                    ${state.tenants.map(t => `<option value="${t.phone}">👤 ${t.name} (Kamar ${state.rooms.find(r => r.id === t.roomId)?.number || '-'})</option>`).join('')}
+                `;
+            }
+            const previewText = state.rules.map((r, i) => `${i+1}. *${r.title}*\n${r.desc}`).join('\n\n');
+            document.getElementById('waRulesPreviewText').textContent = previewText;
+            openModal('modalSendRulesWa');
+        }
+
+        function executeSendRulesWhatsApp() {
+            const target = document.getElementById('waRulesTargetSelect').value;
+            const rulesText = state.rules.map((r, i) => `${i+1}. *${r.title}*\n${r.desc}`).join('\n\n');
+            const message = encodeURIComponent(`📢 *TATA TERTIB & PERATURAN KOST*\n*${state.profile.kostName}*\n\nHalo rekan-rekan penghuni,\nBerikut adalah peraturan tata tertib resmi kost yang wajib ditaati bersama:\n\n${rulesText}\n\nAtas perhatian dan kerjasamanya, kami ucapkan terima kasih.\n— *${state.profile.ownerName} (${state.profile.kostName})*`);
+
+            if (target === 'broadcast') {
+                state.tenants.forEach(t => {
+                    window.open(`https://wa.me/${t.phone.replace(/^0/, '62')}?text=${message}`, '_blank');
+                });
+                showToast(`Membuka WhatsApp untuk broadcast ke ${state.tenants.length} penghuni.`);
+            } else {
+                window.open(`https://wa.me/${target.replace(/^0/, '62')}?text=${message}`, '_blank');
+                showToast('Membuka WhatsApp untuk mengirim peraturan ke penghuni.');
+            }
+            closeModal('modalSendRulesWa');
+        }
+
+        // Form Submissions
+        document.getElementById('formEditProfile').addEventListener('submit', (e) => {
+            e.preventDefault();
+            state.profile.kostName = document.getElementById('profileKostName').value;
+            state.profile.kostSub = document.getElementById('profileKostSub').value;
+            state.profile.ownerName = document.getElementById('profileOwnerName').value;
+            state.profile.phone = document.getElementById('profilePhone').value;
+            state.profile.location = document.getElementById('profileLocation').value;
+            state.profile.address = document.getElementById('profileAddress').value;
+            state.profile.bank = document.getElementById('profileBank').value;
+            state.profile.period = document.getElementById('profilePeriod').value;
+
+            const logoFile = document.getElementById('profileLogoInput').files[0];
+            if (logoFile) {
+                state.profile.logoUrl = URL.createObjectURL(logoFile);
+            }
+
+            const ownerPhotoFile = document.getElementById('profileOwnerPhotoInput').files[0];
+            if (ownerPhotoFile) {
+                state.profile.ownerPhotoUrl = URL.createObjectURL(ownerPhotoFile);
+            }
+
+            showToast('Profil dan logo kost berhasil diperbarui!');
+            renderAll();
+        });
+
+        document.getElementById('formAddExpense').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            state.expenses.unshift({
+                id: 'e_' + Date.now(),
+                title: fd.get('title'),
+                category: fd.get('category'),
+                amount: parseInt(fd.get('amount')),
+                date: new Date().toISOString().split('T')[0]
+            });
+            closeModal('modalAddExpense');
+            e.target.reset();
+            showToast('Pengeluaran operasional berhasil dicatat.');
+            renderAll();
+        });
+
+        document.getElementById('formNewRegistration').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const roomNum = fd.get('roomNumber');
+            const roomLoc = fd.get('roomLocation') || 'Lantai Utama';
+            const tenantName = fd.get('name');
+            const price = parseInt(fd.get('price'));
+            const notes = fd.get('notes') || '';
+
+            let photoUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+            const photoFile = fd.get('photoFile');
+            if (photoFile && photoFile.size > 0) {
+                photoUrl = URL.createObjectURL(photoFile);
+            }
+
+            let room = state.rooms.find(r => r.number === roomNum);
+            if (!room) {
+                room = { id: 'r_' + Date.now(), number: roomNum, location: roomLoc, type: 'Standard', price: price, status: 'occupied', facilities: 'AC, WiFi, Kasur', notes: notes };
+                state.rooms.push(room);
+            } else {
+                room.status = 'occupied';
+                room.price = price;
+                room.location = roomLoc;
+                room.notes = notes;
+            }
+
+            const newTenantId = 't_' + Date.now();
+            state.tenants.push({
+                id: newTenantId,
+                roomId: room.id,
+                name: tenantName,
+                phone: fd.get('phone'),
+                occupation: fd.get('occupation') || 'Penyewa Kost',
+                checkInDate: fd.get('checkInDate'),
+                photoUrl: photoUrl
+            });
+
+            const isPaid = fd.get('initialPaymentStatus') === 'paid';
+            state.bills.push({
+                id: 'b_' + Date.now(),
+                tenantId: newTenantId,
+                roomId: room.id,
+                period: state.profile.period,
+                amount: price,
+                status: isPaid ? 'paid' : 'unpaid',
+                paidDate: isPaid ? new Date().toISOString().split('T')[0] : null,
+                dueDate: isPaid ? null : '2026-11-20'
+            });
+
+            closeModal('modalNewRegistration');
+            e.target.reset();
+            document.getElementById('regKtpPlaceholder').classList.remove('hidden');
+            document.getElementById('regKtpPreviewWrap').classList.add('hidden');
+            document.getElementById('regPhotoPlaceholder').classList.remove('hidden');
+            document.getElementById('regPhotoPreviewWrap').classList.add('hidden');
+
+            showToast(`Pendaftaran kamar ${roomNum} (${roomLoc}) berhasil!`);
+            renderAll();
+        });
+
+        // File input change preview handlers
+        document.getElementById('regKtpInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('regKtpPlaceholder').classList.add('hidden');
+                document.getElementById('regKtpPreviewWrap').classList.remove('hidden');
+                document.getElementById('regKtpFileName').textContent = file.name;
+                document.getElementById('regKtpPreviewImg').src = URL.createObjectURL(file);
+            }
+        });
+
+        document.getElementById('regPhotoInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('regPhotoPlaceholder').classList.add('hidden');
+                document.getElementById('regPhotoPreviewWrap').classList.remove('hidden');
+                document.getElementById('regPhotoFileName').textContent = file.name;
+                document.getElementById('regPhotoPreviewImg').src = URL.createObjectURL(file);
+            }
+        });
+
+        function markBillPaid(billId) {
+            const b = state.bills.find(x => x.id === billId);
+            if (b) {
+                b.status = 'paid';
+                b.paidDate = new Date().toISOString().split('T')[0];
+                showToast('Pembayaran berhasil dilunasi.');
+                renderAll();
+            }
+        }
+
+        function checkoutTenant(tenantId) {
+            const tenant = state.tenants.find(t => t.id === tenantId);
+            if (tenant) {
+                const room = state.rooms.find(r => r.id === tenant.roomId);
+                if (room) room.status = 'available';
+                state.tenants = state.tenants.filter(t => t.id !== tenantId);
+                showToast('Penghuni berhasil di-check-out.');
+                renderAll();
+            }
+        }
+
+        function openViewKtpModal(name) {
+            document.getElementById('viewKtpTenantName').textContent = name;
+            document.getElementById('viewKtpImageContainer').innerHTML = `
+                <img src="https://images.unsplash.com/photo-1544717305-2782549b5136?w=500&auto=format&fit=crop&q=80" alt="KTP ${name}" class="w-full h-auto object-cover rounded-xl">
+            `;
+            openModal('modalViewKtp');
+        }
+
+        let activeReceiptBillId = null;
+        function openReceiptModal(billId) {
+            activeReceiptBillId = billId;
+            const b = state.bills.find(x => x.id === billId);
+            if (!b) return;
+            const tenant = state.tenants.find(t => t.id === b.tenantId) || { name: '-' };
+            const room = state.rooms.find(r => r.id === b.roomId) || { number: '-' };
+            const isPaid = b.status === 'paid';
+
+            const rc = document.getElementById('receiptContent');
+            rc.innerHTML = `
+                <div class="flex justify-between text-xs"><span class="text-slate-500">No. Kuitansi</span><span class="font-bold">INV-${b.id.toUpperCase()}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-500">${isPaid ? 'Tanggal Bayar' : 'Jatuh Tempo'}</span><span class="font-bold">${isPaid ? (b.paidDate || 'Hari ini') : (b.dueDate || 'Segera')}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-500">Nama Penyewa</span><span class="font-bold">${tenant.name}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-500">Unit Kamar</span><span class="font-bold">Kamar ${room.number}</span></div>
+                <div class="flex justify-between text-xs"><span class="text-slate-500">Periode Sewa</span><span class="font-bold">${b.period}</span></div>
+                <div class="border-t border-dashed border-slate-200 my-2 pt-2 flex justify-between text-sm items-center">
+                    <span class="font-bold">${isPaid ? 'Total Lunas' : 'Total Tagihan'}</span>
+                    <span class="font-extrabold ${isPaid ? 'text-emerald-600' : 'text-amber-600'}">${formatRupiah(b.amount)}</span>
+                </div>
+                <div class="mt-2 p-2.5 rounded-xl text-center font-extrabold text-xs tracking-wider uppercase ${isPaid ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}">
+                    STATUS: ${isPaid ? 'LUNAS / TERVERIFIKASI' : 'BELUM BAYAR'}
+                </div>
+            `;
+
+            const waBtn = document.getElementById('btnSendReceiptWa');
+            if (waBtn) {
+                waBtn.innerHTML = `<i data-lucide="message-circle" class="w-4 h-4"></i> Kirim Kuitansi (${isPaid ? 'LUNAS' : 'BELUM BAYAR'}) ke WhatsApp`;
+                if (isPaid) {
+                    waBtn.className = "w-full py-2.5 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-sm";
+                } else {
+                    waBtn.className = "w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold flex items-center justify-center gap-2 transition shadow-sm";
+                }
+            }
+
+            openModal('modalReceipt');
+        }
+
+        function generateReceiptCanvas(billId) {
+            const b = state.bills.find(x => x.id === billId);
+            if (!b) return null;
+            const tenant = state.tenants.find(t => t.id === b.tenantId) || { name: '-' };
+            const room = state.rooms.find(r => r.id === b.roomId) || { number: '-' };
+            const isPaid = b.status === 'paid';
+
+            const canvas = document.createElement('canvas');
+            const width = 480;
+            const height = isPaid ? 580 : 640;
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+
+            // Top accent bar
+            ctx.fillStyle = isPaid ? '#059669' : '#d97706';
+            ctx.fillRect(0, 0, width, 12);
+
+            let curY = 48;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 22px "Inter", Arial, sans-serif';
+            ctx.fillText(state.profile.kostName.toUpperCase(), width/2, curY);
+            curY += 22;
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '12px "Inter", Arial, sans-serif';
+            ctx.fillText(`${state.profile.location} • ${state.profile.phone}`, width/2, curY);
+            curY += 32;
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = 'bold 15px "Inter", Arial, sans-serif';
+            ctx.fillText(isPaid ? 'KUITANSI PEMBAYARAN RESMI' : 'INVOICE / TAGIHAN SEWA KOST', width/2, curY);
+            curY += 24;
+
+            // Dashed divider
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(40, curY);
+            ctx.lineTo(width - 40, curY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            curY += 28;
+
+            // Details
+            ctx.textAlign = 'left';
+            const pad = 40;
+            const valX = 185;
+            const rows = [
+                { label: 'No. Referensi', val: `INV-${b.id.toUpperCase()}` },
+                { label: isPaid ? 'Tanggal Bayar' : 'Jatuh Tempo', val: isPaid ? (b.paidDate || 'Hari ini') : (b.dueDate || 'Segera') },
+                { label: 'Nama Penyewa', val: tenant.name },
+                { label: 'Unit Kamar', val: `Kamar ${room.number}` },
+                { label: 'Periode Sewa', val: b.period }
+            ];
+
+            rows.forEach(r => {
+                ctx.fillStyle = '#64748b';
+                ctx.font = '13px "Inter", Arial, sans-serif';
+                ctx.fillText(r.label, pad, curY);
+
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 13px "Inter", Arial, sans-serif';
+                ctx.fillText(`:  ${r.val}`, valX, curY);
+                curY += 26;
+            });
+
+            curY += 8;
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(40, curY);
+            ctx.lineTo(width - 40, curY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            curY += 32;
+
+            // Total Amount
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#64748b';
+            ctx.font = 'bold 12px "Inter", Arial, sans-serif';
+            ctx.fillText(isPaid ? 'TOTAL PEMBAYARAN DITERIMA' : 'TOTAL TAGIHAN SEWA', width/2, curY);
+            curY += 28;
+
+            ctx.fillStyle = isPaid ? '#059669' : '#d97706';
+            ctx.font = 'bold 26px "Inter", Arial, sans-serif';
+            ctx.fillText(formatRupiah(b.amount), width/2, curY);
+            curY += 34;
+
+            // Status Stamp Box
+            const boxW = 280;
+            const boxH = 44;
+            const boxX = (width - boxW) / 2;
+            ctx.fillStyle = isPaid ? '#ecfdf5' : '#fffbeb';
+            ctx.strokeStyle = isPaid ? '#10b981' : '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(boxX, curY, boxW, boxH, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isPaid ? '#047857' : '#b45309';
+            ctx.font = 'bold 16px "Inter", Arial, sans-serif';
+            ctx.fillText(isPaid ? 'STATUS: LUNAS' : 'STATUS: BELUM BAYAR', width/2, curY + 28);
+            curY += 68;
+
+            // Bank Info if unpaid
+            if (!isPaid) {
+                ctx.fillStyle = '#475569';
+                ctx.font = '12px "Inter", Arial, sans-serif';
+                ctx.fillText('Silakan transfer pembayaran ke rekening:', width/2, curY);
+                curY += 18;
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 13px "Inter", Arial, sans-serif';
+                ctx.fillText(state.profile.bank, width/2, curY);
+                curY += 32;
+            }
+
+            // Footer
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px "Inter", Arial, sans-serif';
+            ctx.fillText(isPaid ? 'Terima kasih atas pembayaran tepat waktu Anda.' : 'Mohon segera lakukan pelunasan sebelum jatuh tempo.', width/2, curY);
+            curY += 16;
+            ctx.fillText(`Dicetak otomatis oleh ${state.profile.kostName}`, width/2, curY);
+
+            return { canvas, tenant, b, isPaid };
+        }
+
+        function downloadCurrentReceipt() {
+            if (!activeReceiptBillId) return;
+            const res = generateReceiptCanvas(activeReceiptBillId);
+            if (!res) return;
+
+            try {
+                const statusLabel = res.isPaid ? 'LUNAS' : 'BELUM_BAYAR';
+                const dataUrl = res.canvas.toDataURL('image/jpeg', 0.95);
+                const link = document.createElement('a');
+                link.download = `Kuitansi_${statusLabel}_${res.tenant.name.replace(/\s+/g, '_')}_${res.b.period}.jpg`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast(`Kuitansi JPG (${res.isPaid ? 'LUNAS' : 'BELUM BAYAR'}) berhasil diunduh!`);
+            } catch (err) {
+                showToast('Gagal mengunduh file kuitansi.');
+            }
+        }
+
+        function sendCurrentReceiptToWa() {
+            if (!activeReceiptBillId) return;
+            const res = generateReceiptCanvas(activeReceiptBillId);
+            if (!res) return;
+
+            const { canvas, tenant, b, isPaid } = res;
+            const room = state.rooms.find(r => r.id === b.roomId) || { number: '-' };
+            const phone = tenant.phone || '0812';
+
+            // Auto-download JPG receipt so the user can attach it directly in WhatsApp
+            try {
+                const statusLabel = isPaid ? 'LUNAS' : 'BELUM_BAYAR';
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                const link = document.createElement('a');
+                link.download = `Kuitansi_${statusLabel}_${tenant.name.replace(/\s+/g, '_')}_${b.period}.jpg`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (e) {}
+
+            let text = '';
+            if (isPaid) {
+                text = encodeURIComponent(`✅ *KUITANSI PEMBAYARAN (LUNAS)*\n*${state.profile.kostName}*\n\nHalo ${tenant.name},\nPembayaran sewa *Kamar ${room.number}* untuk periode *${b.period}* sebesar *${formatRupiah(b.amount)}* telah kami terima dengan status *LUNAS*.\n\n_(File gambar kuitansi JPG telah terunduh otomatis, silakan lampirkan pada chat ini)_\n\nTerima kasih! — *${state.profile.ownerName}*`);
+            } else {
+                text = encodeURIComponent(`⏳ *INFO TAGIHAN SEWA (BELUM BAYAR)*\n*${state.profile.kostName}*\n\nHalo ${tenant.name},\nBerikut adalah rincian tagihan sewa *Kamar ${room.number}* untuk periode *${b.period}* sebesar *${formatRupiah(b.amount)}* dengan status *BELUM BAYAR*.\n\nSilakan lakukan pembayaran melalui:\n🏦 *${state.profile.bank}*\n\n_(File gambar rincian tagihan JPG telah terunduh otomatis, silakan lampirkan pada chat ini)_\n\nTerima kasih! — *${state.profile.ownerName}*`);
+            }
+
+            showToast(`File JPG (${isPaid ? 'LUNAS' : 'BELUM BAYAR'}) diunduh & membuka WhatsApp...`);
+            window.open(`https://wa.me/${phone.replace(/^0/, '62')}?text=${text}`, '_blank');
+        }
+
+        function sendWhatsAppBill(name, phone, roomNum, amount, period, isPaid) {
+            let text = '';
+            if (isPaid) {
+                text = encodeURIComponent(`Halo ${name}, terima kasih! Pembayaran sewa Kost Griya Harmoni untuk Kamar ${roomNum} (${period}) sebesar ${formatRupiah(amount)} telah diterima dan dinyatakan LUNAS. — *${state.profile.kostName}*`);
+            } else {
+                text = encodeURIComponent(`📢 *INFO TAGIHAN SEWA KOST*\n*${state.profile.kostName}*\n\nHalo ${name},\nBerikut rincian tagihan sewa kamar Anda:\n\n• Unit Kamar: *Kamar ${roomNum}*\n• Periode: *${period}*\n• Total Tagihan: *${formatRupiah(amount)}*\n\nSilakan lakukan transfer pembayaran melalui rekening berikut:\n🏦 *${state.profile.bank}*\n\nMohon konfirmasi setelah melakukan transfer. Terima kasih! — *${state.profile.ownerName} (${state.profile.kostName})*`);
+            }
+            window.open(`https://wa.me/${phone.replace(/^0/, '62')}?text=${text}`, '_blank');
+            showToast('Membuka WhatsApp untuk mengirim info tagihan.');
+        }
+
+        function openEditTenantModal(tenantId) {
+            const t = state.tenants.find(x => x.id === tenantId);
+            if (!t) return;
+            const r = state.rooms.find(x => x.id === t.roomId) || { number: '', price: 0, notes: '' };
+            
+            document.getElementById('editTenantId').value = t.id;
+            document.getElementById('editRoomId').value = r.id || '';
+            document.getElementById('editTenantName').value = t.name;
+            document.getElementById('editTenantPhone').value = t.phone;
+            document.getElementById('editTenantOccupation').value = t.occupation;
+            document.getElementById('editRoomNumber').value = r.number;
+            document.getElementById('editRoomPrice').value = r.price;
+            document.getElementById('editRoomNotes').value = r.notes || '';
+
+            openModal('modalEditTenant');
+        }
+
+        document.getElementById('formEditTenant').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const tId = document.getElementById('editTenantId').value;
+            const rId = document.getElementById('editRoomId').value;
+
+            const t = state.tenants.find(x => x.id === tId);
+            const r = state.rooms.find(x => x.id === rId);
+
+            if (t) {
+                t.name = document.getElementById('editTenantName').value;
+                t.phone = document.getElementById('editTenantPhone').value;
+                t.occupation = document.getElementById('editTenantOccupation').value;
+            }
+            if (r) {
+                r.number = document.getElementById('editRoomNumber').value;
+                r.price = parseInt(document.getElementById('editRoomPrice').value);
+                r.notes = document.getElementById('editRoomNotes').value;
+            }
+
+            closeModal('modalEditTenant');
+            showToast('Data penghuni & kamar berhasil diperbarui!');
+            renderAll();
+        });
+
+        // Initial Load
+        window.onload = function() {
+            renderAll();
+        };
+    </script>
+</body>
+</html>
